@@ -1,5 +1,6 @@
 #include "visionCore/pipeline/impl/ContourFeatureExtractor.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include <opencv2/imgproc.hpp>
@@ -30,8 +31,10 @@ domain::FeatureVector ContourFeatureExtractor::extract(
 
     if (!detection.contour.empty()) {
         std::vector<cv::Point> approx;
-        const double eps =
-            m_config.contourApproxEpsilon * detection.perimeter;
+        double eps = m_config.contourApproxEpsilon * detection.perimeter;
+        if (detection.perimeter > 80.0) {
+            eps = std::min(eps, 4.0);
+        }
         cv::approxPolyDP(detection.contour, approx, eps, true);
         features.vertexCount = static_cast<int>(approx.size());
     }

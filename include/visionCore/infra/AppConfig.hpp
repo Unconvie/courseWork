@@ -27,17 +27,38 @@ struct AppConfig {
     /// Использовать cv::adaptiveThreshold вместо фиксированного порога.
     bool adaptiveThreshold = true;
 
+    /// Повысить контраст слабых линий (бледный квадрат).
+    bool useClahe = true;
+    double claheClipLimit = 3.0;
+
     /// Дополнительно искать тонкие контуры через Canny.
     bool useCannyEdges = true;
 
     int cannyLow = 35;
     int cannyHigh = 110;
 
+    /// Второй проход Canny для очень слабых обводок.
+    int faintCannyLow = 12;
+    int faintCannyHigh = 55;
+    double minFaintContourArea = 120.0;
+
+    /// HoughCircles для залитых/пересекающихся кругов.
+    bool useHoughCircles = true;
+    double houghDp = 1.2;
+    double houghMinDist = 55.0;
+    double houghParam1 = 100.0;
+    double houghParam2 = 28.0;
+    int houghMinRadius = 25;
+    int houghMaxRadius = 140;
+
     /// Минимальная площадь контура (залитые области), px².
     double minContourArea = 60.0;
 
     /// Минимальная площадь для контуров с Canny (тонкие линии), px².
     double minCannyContourArea = 280.0;
+
+    /// Удалять контур, если он сильно меньше и внутри другого bbox.
+    double nestedMaxAreaRatio = 0.42;
 
     /// Минимальная сторона bbox (отсев «линий» толщиной 1–3 px).
     int minBboxSide = 12;

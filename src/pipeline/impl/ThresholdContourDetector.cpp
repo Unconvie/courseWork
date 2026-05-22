@@ -40,6 +40,27 @@ bool isFrameContour(const cv::Rect& rect,
     return touchesBorder && area > frameArea * 0.35;
 }
 
+bool centroidInside(const domain::Detection& inner,
+                    const domain::Detection& outer) {
+    const cv::Point c(inner.centroid.x, inner.centroid.y);
+    const cv::Rect box(outer.bbox.x, outer.bbox.y, outer.bbox.width,
+                       outer.bbox.height);
+    return box.contains(c);
+}
+
+std::vector<cv::Point> circleContour(int cx, int cy, int radius) {
+    std::vector<cv::Point> pts;
+    constexpr int kSegments = 32;
+    pts.reserve(kSegments);
+    for (int i = 0; i < kSegments; ++i) {
+        const double angle = (2.0 * CV_PI * i) / kSegments;
+        pts.emplace_back(
+            cx + static_cast<int>(radius * std::cos(angle)),
+            cy + static_cast<int>(radius * std::sin(angle)));
+    }
+    return pts;
+}
+
 domain::Detection makeDetection(const std::vector<cv::Point>& contour,
                                int id) {
     const double area = cv::contourArea(contour);
@@ -60,6 +81,45 @@ domain::Detection makeDetection(const std::vector<cv::Point>& contour,
     det.area = area;
     det.perimeter = perimeter;
     return det;
+}
+
+void suppressNested(std::vector<domain::Detection>& detections,
+                    double maxAreaRatio) {
+    std::vector<bool> drop(detections.size(), false);
+    for (std::size_t i = 0; i < detections.size(); ++i) {
+        for (std::size_t j = 0; j < detections.size(); ++j) {
+            if (i == j || drop[i]) {
+                continue;
+            }
+            if (detections[i].area >= detections[j].area) {
+                continue;
+            }
+            if (detections[i].area > detections[j].area * maxAreaRatio) {
+                continue;
+            }
+            if (centroidInside(detections[i], detections[j])) {
+                drop[i] = true;
+                break;
+            }
+            const cv::Rect a(detections[i].bbox.x, detections[i].bbox.y,
+                             detections[i].bbox.width, detections[i].bbox.height);
+            const cv::Rect b(detections[j].bbox.x, detections[j].bbox.y,
+                             detections[j].bbox.width, detections[j].bbox.height);
+            if (rectIoU(a, b) > 0.35 && detections[i].area < detections[j].area * 0.5) {
+                drop[i] = true;
+                break;
+            }
+        }
+    }
+
+    std::vector<domain::Detection> kept;
+    kept.reserve(detections.size());
+    for (std::size_t i = 0; i < detections.size(); ++i) {
+        if (!drop[i]) {
+            kept.push_back(std::move(detections[i]));
+        }
+    }
+    detections = std::move(kept);
 }
 
 } // anonymous namespace
@@ -84,8 +144,14 @@ ThresholdContourDetector::detect(const core::Image& image) {
                          m_config.detectGaussianSigma);
     }
 
-    const cv::Size imageSize = work.size();
+    cv::Mat enhanced = work;
+    if (m_config.useClahe) {
+        const auto clahe =
+            cv::createCLAHE(m_config.claheClipLimit, {8, 8});
+        clahe->apply(work, enhanced);
+    }
 
+    const cv::Size imageSize = enhanced.size();
     std::vector<domain::Detection> candidates;
 
     auto tryAdd = [&](const std::vector<cv::Point>& contour,
@@ -119,46 +185,67 @@ ThresholdContourDetector::detect(const core::Image& image) {
             makeDetection(contour, static_cast<int>(candidates.size())));
     };
 
-    // --- Залитые области и вложенные контуры (RETR_TREE) ---
+    // --- Залитые области: только внешние контуры (без «квадратов» внутри круга) ---
     cv::Mat binary;
     if (m_config.adaptiveThreshold) {
-        cv::adaptiveThreshold(work, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv::adaptiveThreshold(enhanced, binary, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,
                               cv::THRESH_BINARY_INV, 15, 4);
     } else {
-        cv::threshold(work, binary, m_config.thresholdValue, 255,
+        cv::threshold(enhanced, binary, m_config.thresholdValue, 255,
                       cv::THRESH_BINARY_INV);
     }
 
-    cv::Mat opened;
-    cv::morphologyEx(binary, opened, cv::MORPH_OPEN,
-                     cv::getStructuringElement(cv::MORPH_ELLIPSE, {3, 3}));
-
     std::vector<std::vector<cv::Point>> contours;
-    std::vector<cv::Vec4i> hierarchy;
-    cv::findContours(opened, contours, hierarchy, cv::RETR_TREE,
+    cv::findContours(binary, contours, cv::RETR_EXTERNAL,
                      cv::CHAIN_APPROX_SIMPLE);
-
     for (const auto& contour : contours) {
         tryAdd(contour, m_config.minContourArea, false);
     }
 
-    // --- Тонкие обводки (Canny + замыкание линий) ---
-    if (m_config.useCannyEdges) {
+    auto runCannyPass = [&](int low, int high, double minArea, int closeSize) {
         cv::Mat edges;
-        cv::Canny(work, edges, m_config.cannyLow, m_config.cannyHigh);
+        cv::Canny(enhanced, edges, low, high);
         cv::morphologyEx(
             edges, edges, cv::MORPH_CLOSE,
-            cv::getStructuringElement(cv::MORPH_ELLIPSE, {5, 5}));
+            cv::getStructuringElement(cv::MORPH_ELLIPSE, {closeSize, closeSize}));
 
         std::vector<std::vector<cv::Point>> edgeContours;
         cv::findContours(edges, edgeContours, cv::RETR_LIST,
                          cv::CHAIN_APPROX_SIMPLE);
         for (const auto& contour : edgeContours) {
-            tryAdd(contour, m_config.minCannyContourArea, true);
+            tryAdd(contour, minArea, true);
+        }
+    };
+
+    if (m_config.useCannyEdges) {
+        runCannyPass(m_config.cannyLow, m_config.cannyHigh,
+                     m_config.minCannyContourArea, 5);
+        runCannyPass(m_config.faintCannyLow, m_config.faintCannyHigh,
+                     m_config.minFaintContourArea, 3);
+    }
+
+    // --- Отдельные залитые круги (в т.ч. два пересекающихся) ---
+    if (m_config.useHoughCircles) {
+        std::vector<cv::Vec3f> circles;
+        cv::HoughCircles(enhanced, circles, cv::HOUGH_GRADIENT,
+                         m_config.houghDp, m_config.houghMinDist,
+                         m_config.houghParam1, m_config.houghParam2,
+                         m_config.houghMinRadius, m_config.houghMaxRadius);
+        for (const auto& c : circles) {
+            const int cx = cvRound(c[0]);
+            const int cy = cvRound(c[1]);
+            const int r  = cvRound(c[2]);
+            if (r < m_config.houghMinRadius) {
+                continue;
+            }
+            const auto contour = circleContour(cx, cy, r);
+            tryAdd(contour, CV_PI * r * r * 0.5, false);
         }
     }
 
-    // --- Удаление дубликатов (перекрывающиеся bbox) ---
+    suppressNested(candidates, m_config.nestedMaxAreaRatio);
+
+    // --- Слияние дубликатов по IoU ---
     std::vector<domain::Detection> result;
     for (auto& cand : candidates) {
         bool duplicate = false;
@@ -180,7 +267,8 @@ ThresholdContourDetector::detect(const core::Image& image) {
         }
     }
 
-    // Стабильные id после слияния
+    suppressNested(result, m_config.nestedMaxAreaRatio);
+
     for (std::size_t i = 0; i < result.size(); ++i) {
         result[i].id = static_cast<int>(i);
     }

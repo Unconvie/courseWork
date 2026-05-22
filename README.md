@@ -94,7 +94,8 @@ cmake --build --preset msvc-debug
    cmake --preset msvc-debug
    ```
 4. В VS Code: **Terminal → Run Task → CMake: build (msvc-debug)**  
-   или панель CMake Tools → **Build**.
+   (задача вызывает `D:\progs\cmake\bin\cmake.exe` напрямую — не нужен bash/MSYS2).  
+   Если cmake в другом месте — поправь путь в `.vscode/tasks.json`.
 5. Запуск с выводом в терминал: **Run Task → visionCore: run тест1**.
 6. Отладка с точками останова: **Run and Debug → visionCore: тест1**.
 
