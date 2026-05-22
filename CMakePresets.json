@@ -1,0 +1,74 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "msvc-debug",
+            "displayName": "MSVC Debug (vcpkg x64-windows)",
+            "description": "Основной пресет: Visual Studio + OpenCV из vcpkg x64-windows",
+            "generator": "Visual Studio 17 2022",
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
+            },
+            "binaryDir": "${sourceDir}/build/msvc-debug",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "D:/progs/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-windows",
+                "VCPKG_APPLOCAL_DEPS": "OFF"
+            }
+        },
+        {
+            "name": "msvc-release",
+            "displayName": "MSVC Release (vcpkg x64-windows)",
+            "description": "Релизная сборка Visual Studio + vcpkg x64-windows",
+            "generator": "Visual Studio 17 2022",
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
+            },
+            "binaryDir": "${sourceDir}/build/msvc-release",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "D:/progs/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-windows",
+                "VCPKG_APPLOCAL_DEPS": "OFF"
+            }
+        },
+        {
+            "name": "mingw-debug",
+            "displayName": "MinGW Debug (legacy)",
+            "description": "Старый пресет MinGW — только если починишь UCRT64 g++",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/mingw-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "D:/progs/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
+                "VCPKG_APPLOCAL_DEPS": "OFF",
+                "CMAKE_C_COMPILER": "D:/progs/MSYS2/usr/bin/gcc.exe",
+                "CMAKE_CXX_COMPILER": "D:/progs/MSYS2/usr/bin/g++.exe",
+                "CMAKE_MAKE_PROGRAM": "D:/progs/vcpkg/downloads/tools/ninja-1.13.2-windows/ninja.exe"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "msvc-debug",
+            "configurePreset": "msvc-debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc-release",
+            "configurePreset": "msvc-release",
+            "configuration": "Release"
+        },
+        {
+            "name": "mingw-debug",
+            "configurePreset": "mingw-debug"
+        }
+    ]
+}
