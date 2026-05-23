@@ -1,82 +1,95 @@
 #pragma once
 
-namespace visionCore::infra {
+namespace visionCore::infra
+{
 
-/**
- * @brief Параметры алгоритмов pipeline (значения по умолчанию).
- *
- * В Фазе 4 будет загрузка из JSON; сейчас задаётся в коде и при
- * необходимости меняется перед созданием pipeline.
- */
-struct AppConfig {
-    /// Сглаживание для файла *-noiseFree (bilateral на цвете; 0 = только копия).
-    int bilateralDiameter = 5;
+	/**
+	 * @brief Параметры алгоритмов pipeline (значения по умолчанию).
+	 *
+	 * ═══════════════════════════════════════════════════════════════════
+	 *  ГЛАВНЫЙ ФАЙЛ НАСТРОЕК «ЧУВСТВИТЕЛЬНОСТИ»
+	 *  Меняешь числа здесь → пересобираешь проект → снова запускаешь exe.
+	 *  В Фазе 4 те же поля планируется читать из JSON (--config).
+	 * ═══════════════════════════════════════════════════════════════════
+	 *
+	 * Объект создаётся в main.cpp и передаётся в PipelineFactory, оттуда —
+	 * в GaussianMedianFilter, ThresholdContourDetector, ContourFeatureExtractor,
+	 * ShapeClassifier.
+	 */
+	struct AppConfig
+	{
 
-    /// Сигма Gaussian на grayscale (legacy; 0 = не применять).
-    double gaussianSigma = 0.0;
+		// ─── Файл *-noiseFree (шаг INoiseFilter) ─────────────────────────────
+		/// Диаметр bilateralFilter на цветном изображении (0 = не использовать).
+		int bilateralDiameter = 5;
 
-    /// Median на grayscale (0 = не применять).
-    int medianKernel = 0;
+		/// Доп. размытие grayscale перед noiseFree (0 = выкл.).
+		double gaussianSigma = 0.0;
 
-    /// Лёгкое сглаживание перед детекцией (0 = резкие контуры).
-    double detectGaussianSigma = 0.0;
+		/// Median-фильтр grayscale (0 = выкл.).
+		int medianKernel = 0;
 
-    /// Порог бинаризации [0..255], если adaptiveThreshold = false.
-    int thresholdValue = 127;
+		// ─── Детекция (шаг IDetector) ────────────────────────────────────────
+		/// Сглаживание перед поиском контуров (0 = резкие края, лучше для обводок).
+		double detectGaussianSigma = 0.0;
 
-    /// Использовать cv::adaptiveThreshold вместо фиксированного порога.
-    bool adaptiveThreshold = true;
+		/// false + thresholdValue = фиксированный порог вместо adaptiveThreshold.
+		bool adaptiveThreshold = true;
+		int thresholdValue = 127;
 
-    /// Повысить контраст слабых линий (бледный квадрат).
-    bool useClahe = true;
-    double claheClipLimit = 3.0;
+		/// CLAHE: усиливает слабый контраст (бледный квадрат на белом фоне).
+		bool useClahe = true;
+		double claheClipLimit = 3.0;
 
-    /// Дополнительно искать тонкие контуры через Canny.
-    bool useCannyEdges = true;
+		/// Canny: основной и «слабый» проход для тонких обводок.
+		bool useCannyEdges = true;
+		int cannyLow = 35;
+		int cannyHigh = 110;
+		int faintCannyLow = 12;
+		int faintCannyHigh = 55;
+		double minFaintContourArea = 160.0;
 
-    int cannyLow = 35;
-    int cannyHigh = 110;
+		/// HoughCircles: залитые/пересекающиеся круги (выше param2 → меньше ложных).
+		bool useHoughCircles = true;
+		double houghDp = 1.2;
+		double houghMinDist = 70.0;
+		double houghParam1 = 100.0;
+		double houghParam2 = 34.0;
+		int houghMinRadius = 28;
+		int houghMaxRadius = 130;
 
-    /// Второй проход Canny для очень слабых обводок.
-    int faintCannyLow = 12;
-    int faintCannyHigh = 55;
-    double minFaintContourArea = 120.0;
+		/// Мин. площадь контура (px²): меньше значение → больше мелких объектов.
+		double minContourArea = 80.0;
+		double minCannyContourArea = 320.0;
 
-    /// HoughCircles для залитых/пересекающихся кругов.
-    bool useHoughCircles = true;
-    double houghDp = 1.2;
-    double houghMinDist = 55.0;
-    double houghParam1 = 100.0;
-    double houghParam2 = 28.0;
-    int houghMinRadius = 25;
-    int houghMaxRadius = 140;
+		/// Вложенная обводка (квадрат в круге): сохранять, если площадь ≥ доли внешней.
+		double nestedOutlineKeepMinRatio = 0.05;
 
-    /// Минимальная площадь контура (залитые области), px².
-    double minContourArea = 60.0;
+		/// Удалять только «пятна» внутри круга (доля площади + высокая circularity).
+		double nestedBlobSuppressMaxRatio = 0.28;
 
-    /// Минимальная площадь для контуров с Canny (тонкие линии), px².
-    double minCannyContourArea = 280.0;
+		/// Мин. сторона bbox; отсекает линии толщиной 1–2 px.
+		int minBboxSide = 12;
 
-    /// Удалять контур, если он сильно меньше и внутри другого bbox.
-    double nestedMaxAreaRatio = 0.42;
+		/// Не брать контур на весь кадр (доля площади кадра).
+		double maxContourAreaRatio = 0.82;
 
-    /// Минимальная сторона bbox (отсев «линий» толщиной 1–3 px).
-    int minBboxSide = 12;
+		/// IoU bbox для слияния дубликатов (выше → агрессивнее объединяет).
+		double contourDedupeIou = 0.62;
 
-    /// Не брать контур, занимающий больше этой доли кадра (рамка/фон).
-    double maxContourAreaRatio = 0.82;
+		// ─── Классификация (шаг IClassifier / ShapeClassifier) ───────────────
+		/// Ниже этого порога top-класс → Unknown (см. ShapeClassifier.cpp).
+		float minClassificationConfidence = 0.18f;
 
-    /// Слияние дубликатов: IoU bbox выше порога — оставить больший контур.
-    double contourDedupeIou = 0.55;
+		/// Доля периметра для approxPolyDP → vertexCount → Triangle/Hexagon.
+		double contourApproxEpsilon = 0.015;
 
-    /// Минимальная уверенность top-класса для вывода (иначе Unknown).
-    float minClassificationConfidence = 0.18f;
+		// ─── Сохранение на диск (main.cpp) ───────────────────────────────────
+		/// Качество JPEG при записи *-noiseFree / *-shapeOutline [0..100].
+		int jpegQuality = 90;
 
-    /// Точность аппроксимации контура (Дуглас–Пёкер), доля периметра.
-    double contourApproxEpsilon = 0.015;
-
-    /// Качество JPEG при сохранении производных файлов [0..100].
-    int jpegQuality = 90;
-};
+		/// Писать *-report.txt с результатами (можно отключить флагом --no-report).
+		bool saveReportByDefault = true;
+	};
 
 } // namespace visionCore::infra

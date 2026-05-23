@@ -42,7 +42,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Включаем максимально строгий набор. Если предупреждение появится, оно почти
 # наверняка указывает на реальную проблему - не игнорируем.
 if(MSVC)
-    add_compile_options(/W4)
+    # /utf-8 — строки в исходниках и вывод в консоль/файлы как UTF-8 (русский текст).
+    add_compile_options(/W4 /utf-8)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -55,6 +56,40 @@ endif()
 # CMake находит их через toolchain-файл vcpkg, заданный в CMakePresets.json.
 find_package(OpenCV REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+
+# GLFW + Dear ImGui (GUI) — подтягиваются при конфигурации CMake (нужен интернет).
+include(FetchContent)
+FetchContent_Declare(
+    glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG 3.4
+)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(glfw)
+
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.6
+)
+FetchContent_MakeAvailable(imgui)
+
+set(IMGUI_DIR ${imgui_SOURCE_DIR})
+add_library(imgui_backend STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl2.cpp
+)
+target_include_directories(imgui_backend PUBLIC
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
+target_link_libraries(imgui_backend PUBLIC glfw)
 
 # -----------------------------------------------------------------------------
 # Библиотека visionCore - вся бизнес-логика
@@ -83,6 +118,7 @@ add_library(visionCore STATIC
     src/pipeline/impl/ContourFeatureExtractor.cpp
     src/pipeline/impl/ShapeClassifier.cpp
     src/pipeline/impl/OpenCvAnnotator.cpp
+    src/app/BatchRunner.cpp
 )
 
 # Публичные заголовки видны и самой библиотеке, и её потребителям (main и т.д.).
@@ -100,8 +136,23 @@ target_link_libraries(visionCore PUBLIC
 # -----------------------------------------------------------------------------
 # Исполняемый файл - точка входа CLI
 # -----------------------------------------------------------------------------
-add_executable(visionCore_app src/main.cpp)
-target_link_libraries(visionCore_app PRIVATE visionCore)
+add_executable(visionCore_app
+    src/main.cpp
+    src/gui/GuiApp.cpp
+    src/gui/NativeDialogsWin32.cpp
+)
+target_link_libraries(visionCore_app PRIVATE
+    visionCore
+    imgui_backend
+)
+if(WIN32)
+    target_link_libraries(visionCore_app PRIVATE
+        opengl32
+        gdi32
+        shell32
+        ole32
+    )
+endif()
 
 # Обходной вариант только для сломанного MinGW-пресета (см. mingw-debug).
 if(MINGW)

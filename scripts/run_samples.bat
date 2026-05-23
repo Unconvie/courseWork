@@ -1,23 +1,23 @@
 @echo off
-REM Pipeline на тестовом изображении data\samples\тест1.png
+REM Обработка всех ИСХОДНЫХ картинок в data\samples (без *-noiseFree, *-shapeOutline, *-copy).
 
 setlocal
 set "PROJECT_DIR=%~dp0.."
 set "EXE=%PROJECT_DIR%\build\msvc-debug\bin\Debug\visionCore_app.exe"
-set "TEST1=%PROJECT_DIR%\data\samples\тест1.png"
+set "SAMPLES=%PROJECT_DIR%\data\samples"
 
 if not exist "%EXE%" (
     echo Сначала: scripts\build_msvc.bat
     exit /b 1
 )
 
-if not exist "%TEST1%" (
-    echo Не найден файл: %TEST1%
-    exit /b 1
-)
+REM UTF-8 в консоли (русский текст в логах).
+chcp 65001 >nul
 
-"%EXE%" "%TEST1%" --save-noise-free --save-outline
+REM GUI: запуск без аргументов. CLI: раскомментируй строку ниже.
+"%EXE%"
+REM "%EXE%" "%SAMPLES%" --save-noise-free --save-outline --save-report
 echo.
-echo Результаты рядом с исходником:
-echo   тест1-noiseFree.png  тест1-shapeOutline.png
+echo Рядом с каждым исходником:
+echo   *-noiseFree.*  *-shapeOutline.*  *-report.txt
 endlocal
