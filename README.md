@@ -120,8 +120,13 @@ cd "E:\uni\SEMESTER WORK\courseWork"
 
 ```powershell
 .\build\msvc-debug\bin\Debug\visionCore_app.exe --help
+.\scripts\gen_samples.bat
 .\build\msvc-debug\bin\Debug\visionCore_app.exe data\samples --save-noise-free --save-outline
 ```
+
+Генератор тестов (`--generate-samples`) создаёт в `data/samples` файлы `gen-*.png`
+с фигурами (круг, треугольник, квадрат, прямоугольник, шестиугольник) и шумом
+(гаусс, соль-перец, speckle, равномерный, смешанный). Подробнее — `docs/РУКОВОДСТВО.md`.
 
 Флаги:
 

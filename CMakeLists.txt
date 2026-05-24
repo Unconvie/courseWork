@@ -119,6 +119,7 @@ add_library(visionCore STATIC
     src/pipeline/impl/ShapeClassifier.cpp
     src/pipeline/impl/OpenCvAnnotator.cpp
     src/app/BatchRunner.cpp
+    src/tools/SampleImageGenerator.cpp
 )
 
 # Публичные заголовки видны и самой библиотеке, и её потребителям (main и т.д.).

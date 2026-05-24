@@ -11,6 +11,7 @@
 #include "visionCore/infra/ConsoleUtf8.hpp"
 #include "visionCore/infra/Logger.hpp"
 #include "visionCore/gui/GuiApp.hpp"
+#include "visionCore/tools/SampleImageGenerator.hpp"
 
 namespace {
 
@@ -18,9 +19,11 @@ using namespace visionCore;
 
 struct CliOptions {
     std::filesystem::path inputPath;
+    std::filesystem::path generateSamplesDir;
     app::OutputOptions outputs;
     bool showHelp = false;
     bool launchGui = false;
+    bool generateSamples = false;
 };
 
 void printUsage(const char* programName) {
@@ -36,6 +39,7 @@ void printUsage(const char* programName) {
         << "  --no-outline\n"
         << "  --save-report        *-report.txt\n"
         << "  --no-report\n"
+        << "  --generate-samples [папка]  создать тестовые PNG (по умолчанию data/samples)\n"
         << "  -h, --help\n";
 }
 
@@ -64,6 +68,13 @@ CliOptions parseArgs(int argc, char* argv[], const infra::AppConfig& config) {
             opts.outputs.saveReport = true;
         } else if (arg == "--no-report") {
             opts.outputs.saveReport = false;
+        } else if (arg == "--generate-samples") {
+            opts.generateSamples = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                opts.generateSamplesDir = argv[++i];
+            } else {
+                opts.generateSamplesDir = "data/samples";
+            }
         } else if (arg.front() == '-') {
             throw std::runtime_error("Неизвестный аргумент: " + arg);
         } else if (opts.inputPath.empty()) {
@@ -90,6 +101,19 @@ int main(int argc, char* argv[]) {
         }
 
         infra::setupConsoleUtf8();
+
+        if (opts.generateSamples) {
+            tools::SampleGeneratorOptions genOpts;
+            genOpts.outputDir = opts.generateSamplesDir;
+            const tools::SampleGeneratorResult gen =
+                tools::generateSampleImages(genOpts);
+            infra::Logger::setLevel(infra::LogLevel::Info);
+            infra::Logger::info(gen.summary);
+            for (const auto& path : gen.paths) {
+                infra::Logger::info("  " + path.string());
+            }
+            return EXIT_SUCCESS;
+        }
 
         if (opts.showHelp) {
             printUsage(argc > 0 ? argv[0] : "visionCore_app");
